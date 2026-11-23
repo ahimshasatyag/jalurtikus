@@ -8,6 +8,7 @@
         "packages/*"
     ],
     "scripts": {
+        "dev:backend": "apps\\backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir apps/backend --host 127.0.0.1 --port 8000 --reload",
         "dev:web": "npm run dev --workspace=apps/web",
         "dev:mobile": "npm run start --workspace=apps/mobile",
         "build:web": "npm run build --workspace=apps/web",
