@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp/
+
+# Environment
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Build
+dist/
+build/
+.expo/
+web-build/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Data files
+*.osm.pbf
+*.gpkg
+*.graphml
+*.sqlite
+*.db
