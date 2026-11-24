@@ -34,16 +34,20 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
   const incidentMarkersRef = useRef<Marker[]>([]);
 
   const { origin, destination, recommendedRoute, alternatives, selectedRoute } = useRouteStore();
-  const { incidents } = useTrafficStore();
+  const { incidents, apiKey } = useTrafficStore();
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    const initialCenter: [number, number] = origin
+      ? [origin.longitude, origin.latitude]
+      : [106.7892, -6.1372];
+
     const map = new Map({
       container: mapContainerRef.current,
       style: DARK_MAP_STYLE,
-      center: [106.827153, -6.175392],
-      zoom: 12,
+      center: initialCenter,
+      zoom: 13,
       attributionControl: false,
     });
 
@@ -114,16 +118,78 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     const map = mapRef.current;
     if (!map) return;
 
+    const updateFlowLayer = () => {
+      if (apiKey) {
+        if (!map.getSource('tomtom-flow')) {
+          map.addSource('tomtom-flow', {
+            type: 'raster',
+            tiles: [
+              `https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${apiKey}`,
+            ],
+            tileSize: 256,
+          });
+
+          const beforeId = map.getLayer('primary-route-casing') ? 'primary-route-casing' : undefined;
+          map.addLayer(
+            {
+              id: 'tomtom-flow-layer',
+              type: 'raster',
+              source: 'tomtom-flow',
+              paint: { 'raster-opacity': 0.8 },
+            },
+            beforeId
+          );
+        }
+      } else {
+        if (map.getLayer('tomtom-flow-layer')) map.removeLayer('tomtom-flow-layer');
+        if (map.getSource('tomtom-flow')) map.removeSource('tomtom-flow');
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      updateFlowLayer();
+    } else {
+      map.once('load', updateFlowLayer);
+    }
+  }, [apiKey]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
     if (origin) {
       if (!originMarkerRef.current) {
         const el = document.createElement('div');
-        el.className = 'w-7 h-7 rounded-full bg-primary border-2 border-midnight-navy flex items-center justify-center text-midnight-navy font-bold text-xs shadow-lg cursor-pointer transform -translate-x-1/2 -translate-y-1/2';
+        el.className = 'w-7 h-7 rounded-full bg-primary border-2 border-midnight-navy flex items-center justify-center text-midnight-navy font-bold text-xs shadow-lg cursor-grab active:cursor-grabbing hover:scale-110 transition-transform';
         el.innerText = 'A';
-        originMarkerRef.current = new Marker({ element: el })
+        el.title = 'Titik Asal (A) - Dapat digeser (drag) ke titik persis';
+        const marker = new Marker({ element: el, anchor: 'center', draggable: true })
           .setLngLat([origin.longitude, origin.latitude])
           .addTo(map);
+
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          const lat = Number(lngLat.lat.toFixed(6));
+          const lon = Number(lngLat.lng.toFixed(6));
+          const name = `Lokasi Pilihan (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+          localStorage.setItem(
+            'jalurtikus_user_gps',
+            JSON.stringify({ latitude: lat, longitude: lon, name })
+          );
+          useRouteStore.getState().setOrigin(
+            { latitude: lat, longitude: lon },
+            name
+          );
+        });
+
+        originMarkerRef.current = marker;
       } else {
         originMarkerRef.current.setLngLat([origin.longitude, origin.latitude]);
+      }
+
+      // Fokuskan kamera peta ke lokasi titik asal jika belum ada rute aktif
+      if (!recommendedRoute && !selectedRoute) {
+        map.flyTo({ center: [origin.longitude, origin.latitude], zoom: 15, duration: 800 });
       }
     } else if (originMarkerRef.current) {
       originMarkerRef.current.remove();
@@ -133,11 +199,22 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     if (destination) {
       if (!destMarkerRef.current) {
         const el = document.createElement('div');
-        el.className = 'w-7 h-7 rounded-full bg-traffic-heavy border-2 border-cloud-white flex items-center justify-center text-cloud-white font-bold text-xs shadow-lg cursor-pointer transform -translate-x-1/2 -translate-y-1/2';
+        el.className = 'w-7 h-7 rounded-full bg-traffic-heavy border-2 border-cloud-white flex items-center justify-center text-cloud-white font-bold text-xs shadow-lg cursor-grab active:cursor-grabbing hover:scale-110 transition-transform';
         el.innerText = 'B';
-        destMarkerRef.current = new Marker({ element: el })
+        el.title = 'Titik Tujuan (B) - Dapat digeser (drag) ke titik persis';
+        const marker = new Marker({ element: el, anchor: 'center', draggable: true })
           .setLngLat([destination.longitude, destination.latitude])
           .addTo(map);
+
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          useRouteStore.getState().setDestination(
+            { latitude: lngLat.lat, longitude: lngLat.lng },
+            `Titik Tujuan (${lngLat.lat.toFixed(4)}, ${lngLat.lng.toFixed(4)})`
+          );
+        });
+
+        destMarkerRef.current = marker;
       } else {
         destMarkerRef.current.setLngLat([destination.longitude, destination.latitude]);
       }
@@ -200,7 +277,10 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     incidentMarkersRef.current.forEach((m) => m.remove());
     incidentMarkersRef.current = [];
 
-    incidents.forEach((inc) => {
+    // Tampilkan hingga 80 insiden prioritas agar peta tetap responsif 60 FPS
+    const displayedIncidents = incidents.slice(0, 80);
+
+    displayedIncidents.forEach((inc) => {
       const el = document.createElement('div');
       el.className = 'w-6 h-6 rounded-full bg-amber text-midnight-navy flex items-center justify-center font-bold text-xs shadow-md border border-cloud-white animate-pulse';
       el.title = `${inc.category.toUpperCase()}: ${inc.description}`;

@@ -37,13 +37,39 @@ interface RouteState {
   clearRoute: () => void;
 }
 
+// Mengambil posisi GPS tersimpan user jika ada, atau default ke lokasi terkalibrasi (-6.1372, 106.7892)
+const getInitialOrigin = (): { coords: Coordinates; name: string } => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('jalurtikus_user_gps');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.latitude && parsed.longitude) {
+          return {
+            coords: { latitude: parsed.latitude, longitude: parsed.longitude },
+            name: parsed.name || 'Lokasi Saya (Terkalibrasi)',
+          };
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return {
+    coords: { latitude: -6.1372, longitude: 106.7892 },
+    name: 'Jl. Soka, Pejagalan (GPS Saya)',
+  };
+};
+
+const initialOrigin = getInitialOrigin();
+
 export const useRouteStore = create<RouteState>((set, get) => ({
-  origin: { latitude: -6.175392, longitude: 106.827153 },
-  originName: 'Monumen Nasional (Monas)',
+  origin: initialOrigin.coords,
+  originName: initialOrigin.name,
   destination: { latitude: -6.244383, longitude: 106.798132 },
   destinationName: 'Terminal Blok M',
   vehicleType: 'motorcycle',
-  preference: 'fastest',
+  preference: 'avoid_congestion',
   avoidTolls: false,
   avoidCongestion: true,
 

@@ -13,6 +13,7 @@ class TrafficService:
         GraphManager.get_instance().update_traffic_overrides(conditions)
 
     def get_current_snapshot(self) -> TrafficSnapshot:
+        self._sync_to_graph()
         return self.client.get_current_snapshot()
 
     def get_edge_traffic(self, edge_id: str) -> TrafficSegmentResponse:

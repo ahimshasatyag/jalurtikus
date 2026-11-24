@@ -34,6 +34,7 @@ JAKARTA_MVP_NODES: Dict[str, Dict[str, Any]] = {
     "kota_tua": {"name": "Stasiun Jakarta Kota", "lat": -6.137600, "lon": 106.814600},
     "grogol": {"name": "Simpang Grogol", "lat": -6.162000, "lon": 106.788500},
     "pluit": {"name": "Pluit Penjaringan", "lat": -6.115030, "lon": 106.787360},
+    "pejagalan": {"name": "Pejagalan Penjaringan", "lat": -6.137200, "lon": 106.789200},
 }
 
 # Ruas Jalan & Konektivitas
@@ -60,7 +61,7 @@ JAKARTA_MVP_EDGES = [
         [106.8128, -6.2235]
     ]),
     ("scbd", "blok_m", "Jl. Sisingamangaraja", "primary", False, False, 40.0, [
-        [106.8028, -6.2285], [106.7995, -6.2365], [106.7985, -6.2415]
+        [106.8055, -6.2250], [106.8005, -6.2241], [106.8000, -6.2270], [106.7992, -6.2345], [106.7985, -6.2405]
     ]),
 
     # Koridor Timur (Kuningan - Rasuna Said - Mampang)
@@ -114,7 +115,7 @@ JAKARTA_MVP_EDGES = [
         [106.8085, -6.2190]
     ]),
     ("senayan_gbk", "blok_m", "Jl. Hang Tuah - Kyai Maja", "secondary", False, False, 30.0, [
-        [106.7985, -6.2245], [106.7975, -6.2315], [106.7955, -6.2375], [106.7975, -6.2425]
+        [106.7990, -6.2210], [106.7975, -6.2255], [106.7960, -6.2320], [106.7965, -6.2380], [106.7978, -6.2430]
     ]),
 
     # Tol Dalam Kota (Mobil Only)
@@ -147,6 +148,15 @@ JAKARTA_MVP_EDGES = [
     ("jalur_tikus_karet", "semanggi", "Jl. Garnisun", "residential", False, False, 25.0, [
         [106.8190, -6.2180]
     ]),
+    ("tanah_abang", "jalur_tikus_benhil", "Jalur Tikus Karet Tengsin", "residential", False, False, 22.0, [
+        [106.8160, -6.1980], [106.8150, -6.2060]
+    ]),
+    ("senayan_gbk", "blok_m", "Jalur Tikus Senopati - Melawai", "residential", False, False, 28.0, [
+        [106.8050, -6.2300], [106.8040, -6.2380]
+    ]),
+    ("harmoni", "tanah_abang", "Jalur Tikus Petojo - Cideng", "residential", False, False, 25.0, [
+        [106.8130, -6.1720], [106.8140, -6.1800]
+    ]),
 
     # Koridor Utara (Konektivitas ke Harmoni, Kota Tua, Grogol, dan Pluit)
     ("monas", "harmoni", "Jl. Medan Merdeka Barat - Gajah Mada", "primary", False, False, 45.0, [
@@ -166,6 +176,18 @@ JAKARTA_MVP_EDGES = [
     ]),
     ("harmoni", "tomang", "Jl. Suryopranoto", "primary", False, False, 40.0, [
         [106.8125, -6.1718], [106.8040, -6.1725]
+    ]),
+    ("pejagalan", "pluit", "Jl. Pluit Selatan Raya", "primary", False, False, 40.0, [
+        [106.7905, -6.1280], [106.7890, -6.1200]
+    ]),
+    ("pejagalan", "grogol", "Jl. Prof. Dr. Latumenten", "primary", False, False, 40.0, [
+        [106.7915, -6.1450], [106.7905, -6.1530]
+    ]),
+    ("pejagalan", "kota_tua", "Jl. Bandengan Selatan", "secondary", False, False, 35.0, [
+        [106.7980, -6.1360], [106.8060, -6.1365]
+    ]),
+    ("pejagalan", "grogol", "Jalur Tikus Teluk Gong - Jelambar", "residential", False, False, 25.0, [
+        [106.7870, -6.1430], [106.7860, -6.1520]
     ]),
 ]
 

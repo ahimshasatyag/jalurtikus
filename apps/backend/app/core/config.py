@@ -24,10 +24,12 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
-    # Traffic Provider
-    TRAFFIC_PROVIDER: str = "osm"
-    TRAFFIC_API_KEY: str = ""
-    TRAFFIC_CACHE_TTL_SECONDS: int = 300  # 5 minutes
+    # Traffic Provider (TomTom / OSM)
+    TRAFFIC_PROVIDER: str = "tomtom"
+    TRAFFIC_API_KEY: str = "ROoTCzMoyLgBWBWAmOqfLFCqxcPuP7Ww"
+    TOMTOM_API_KEY: str = "ROoTCzMoyLgBWBWAmOqfLFCqxcPuP7Ww"
+    TOMTOM_DEFAULT_BBOX: str = "106.65,-6.38,106.98,-6.08"
+    TRAFFIC_CACHE_TTL_SECONDS: int = 60  # Cache real-time API selama 60 detik
 
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [

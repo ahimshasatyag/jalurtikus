@@ -81,13 +81,21 @@ def calculate_edge_weight(
     speed_ms = effective_speed_kmh * (1000.0 / 3600.0)
     duration_seconds = distance_meters / speed_ms
 
-    # 6. Penalti Tambahan untuk Congestion jika diaktifkan
+    # 6. Penalti Tambahan untuk Congestion jika diaktifkan (Jalur Tikus / Hindari Macet)
     congestion_penalty = 1.0
-    if avoid_congestion:
-        if traffic_condition == TrafficCondition.HEAVY:
-            congestion_penalty = 1.5
+    if avoid_congestion or preference == RoutePreference.AVOID_CONGESTION:
+        if traffic_condition == TrafficCondition.LIGHT:
+            congestion_penalty = 1.2
+        elif traffic_condition == TrafficCondition.MODERATE:
+            congestion_penalty = 2.2
+        elif traffic_condition == TrafficCondition.HEAVY:
+            congestion_penalty = 4.5
         elif traffic_condition == TrafficCondition.SEVERE:
-            congestion_penalty = 2.5
+            congestion_penalty = 10.0
+
+        # Berikan prioritas khusus untuk Jalur Tikus (jalan pemukiman / gang alternatif) yang lancar (FREE_FLOW)
+        if road_type in ["residential", "service", "tertiary"] and traffic_condition == TrafficCondition.FREE_FLOW:
+            congestion_penalty *= 0.65
 
     total_weight = duration_seconds * congestion_penalty * penalty_multiplier
     return total_weight

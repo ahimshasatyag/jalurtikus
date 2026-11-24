@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Loader2 } from 'lucide-react';
+import { MapPin, Loader2, Crosshair } from 'lucide-react';
 import { locationService } from '../../services/locationService';
 import type { LocationCandidate, Coordinates } from '../../types';
 
@@ -9,6 +9,8 @@ interface LocationSearchInputProps {
   value: string;
   onSelect: (coords: Coordinates, displayName: string) => void;
   iconColor?: string;
+  onGpsClick?: () => void;
+  isGpsLoading?: boolean;
 }
 
 export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
@@ -17,6 +19,8 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   value,
   onSelect,
   iconColor = 'text-primary',
+  onGpsClick,
+  isGpsLoading = false,
 }) => {
   const [query, setQuery] = useState(value);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
@@ -73,7 +77,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
         <MapPin className={`absolute left-3 w-4 h-4 ${iconColor}`} />
         <input
           type="text"
-          className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:border-primary transition"
+          className={`w-full bg-surface border border-border rounded-lg pl-9 ${onGpsClick ? 'pr-14' : 'pr-8'} py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:border-primary transition`}
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
@@ -81,9 +85,26 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
             if (candidates.length > 0) setIsOpen(true);
           }}
         />
-        {isLoading && (
-          <Loader2 className="absolute right-3 w-4 h-4 text-text-secondary animate-spin" />
-        )}
+        <div className="absolute right-2.5 flex items-center gap-1.5">
+          {isLoading && (
+            <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
+          )}
+          {onGpsClick && (
+            <button
+              type="button"
+              onClick={onGpsClick}
+              disabled={isGpsLoading}
+              title="Gunakan Lokasi GPS Saya"
+              className="p-1 rounded text-text-secondary hover:text-primary hover:bg-surface-secondary transition disabled:opacity-50"
+            >
+              {isGpsLoading ? (
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+              ) : (
+                <Crosshair className="w-4 h-4 text-info hover:text-primary" />
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {isOpen && candidates.length > 0 && (

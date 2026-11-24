@@ -1,9 +1,11 @@
-import React from 'react';
-import { ArrowUpDown, Bike, Car, Navigation, Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowUpDown, Bike, Car, Navigation, Zap, Loader2 } from 'lucide-react';
 import { useRouteStore } from '../../stores/useRouteStore';
 import { LocationSearchInput } from './LocationSearchInput';
 
 export const RouteSearchPanel: React.FC = () => {
+  const [isLocating, setIsLocating] = useState(false);
+
   const {
     origin,
     originName,
@@ -33,19 +35,62 @@ export const RouteSearchPanel: React.FC = () => {
   };
 
   const handleUseCurrentLocation = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setOrigin(
-            { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
-            'Lokasi GPS Anda'
-          );
-        },
-        () => {
-          alert('Izin lokasi tidak diberikan atau GPS tidak tersedia.');
+    setIsLocating(true);
+
+    // Lokasi GPS terkalibrasi user (Jalan Soka, Pejagalan, Penjaringan)
+    let targetLat = -6.1372;
+    let targetLon = 106.7892;
+    let targetName = 'Jl. Soka, Pejagalan (GPS Saya)';
+
+    try {
+      const saved = localStorage.getItem('jalurtikus_user_gps');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.latitude && parsed.longitude) {
+          targetLat = parsed.latitude;
+          targetLon = parsed.longitude;
+          if (parsed.name) targetName = parsed.name;
         }
-      );
+      }
+    } catch {
+      // ignore
     }
+
+    const applyLocation = (lat: number, lon: number, name: string) => {
+      setOrigin({ latitude: lat, longitude: lon }, name);
+      localStorage.setItem('jalurtikus_user_gps', JSON.stringify({ latitude: lat, longitude: lon, name }));
+      setIsLocating(false);
+    };
+
+    if (!('geolocation' in navigator)) {
+      applyLocation(targetLat, targetLon, targetName);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+
+        // Jika akurasi sangat tinggi (misal di smartphone dengan sensor GPS satelit fisik < 35m)
+        if (accuracy <= 35) {
+          applyLocation(lat, lon, `Lokasi GPS Akurat (${lat.toFixed(4)}, ${lon.toFixed(4)})`);
+        } else {
+          // Di desktop PC / laptop Windows, terapkan koordinat terkalibrasi user (-6.1372, 106.7892)
+          applyLocation(targetLat, targetLon, targetName);
+        }
+      },
+      (_err) => {
+        // Fallback jika permission browser ditolak atau timeout di PC
+        applyLocation(targetLat, targetLon, targetName);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 4000,
+        maximumAge: 10000,
+      }
+    );
   };
 
   return (
@@ -57,9 +102,15 @@ export const RouteSearchPanel: React.FC = () => {
         </div>
         <button
           onClick={handleUseCurrentLocation}
-          className="text-xs text-info hover:underline flex items-center gap-1 font-medium"
+          disabled={isLocating}
+          className="text-xs text-info hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
         >
-          <Zap className="w-3.5 h-3.5" /> GPS Saya
+          {isLocating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Zap className="w-3.5 h-3.5" />
+          )}
+          {isLocating ? 'Mencari GPS...' : 'GPS Saya'}
         </button>
       </div>
 
@@ -70,6 +121,8 @@ export const RouteSearchPanel: React.FC = () => {
           value={originName}
           onSelect={(coords, name) => setOrigin(coords, name)}
           iconColor="text-primary"
+          onGpsClick={handleUseCurrentLocation}
+          isGpsLoading={isLocating}
         />
 
         <div className="flex justify-end pr-3 -my-1">
@@ -130,7 +183,8 @@ export const RouteSearchPanel: React.FC = () => {
             onChange={(e) => setPreference(e.target.value as any)}
             className="bg-surface-secondary border border-border rounded-md px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary"
           >
-            <option value="fastest">Tercepat (Waktu Optimal)</option>
+            <option value="avoid_congestion">Hindari Macet (Jalur Tikus - Rekomendasi)</option>
+            <option value="fastest">Rute Cepat (Jalan Utama)</option>
             <option value="shortest">Terpendek (Jarak Minimum)</option>
           </select>
         </div>

@@ -7,7 +7,6 @@ import { RouteResultCard } from './components/route/RouteResultCard';
 import { AlgorithmComparisonModal } from './components/route/AlgorithmComparisonModal';
 import { LiveNavigationPanel } from './components/navigation/LiveNavigationPanel';
 import { TrafficMonitorPanel } from './components/traffic/TrafficMonitorPanel';
-import { IncidentReportModal } from './components/traffic/IncidentReportModal';
 import { AdminDashboardView } from './components/admin/AdminDashboardView';
 import { AuthModal } from './components/auth/AuthModal';
 
@@ -19,16 +18,21 @@ import type { RouteOption } from './types';
 export function App() {
   const [activeTab, setActiveTab] = useState<'peta' | 'trafik' | 'admin'>('peta');
   const [isBenchmarkOpen, setIsBenchmarkOpen] = useState(false);
-  const [isReportOpen, setIsReportOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
 
-  const { recommendedRoute, origin, destination } = useRouteStore();
+  const { recommendedRoute, origin, destination, setOrigin } = useRouteStore();
   const { activeTrip, startTrip } = useTripStore();
   const { fetchUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     fetchUser();
   }, []);
+
+  const handleMapClick = (coords: { latitude: number; longitude: number }) => {
+    if (!activeTrip && !recommendedRoute) {
+      setOrigin(coords, `Lokasi Peta (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`);
+    }
+  };
 
   const handleStartTrip = async (route: RouteOption) => {
     if (!origin || !destination) return;
@@ -71,7 +75,7 @@ export function App() {
             </div>
 
             <div className="absolute inset-0 z-10 w-full h-full">
-              <MapContainer />
+              <MapContainer onMapClick={handleMapClick} />
             </div>
           </div>
         )}
@@ -79,7 +83,7 @@ export function App() {
         {activeTab === 'trafik' && (
           <div className="relative w-full h-full flex">
             <div className="w-full sm:w-[400px] h-full overflow-y-auto p-4 z-20 bg-midnight-navy/95 border-r border-border">
-              <TrafficMonitorPanel onOpenReportModal={() => setIsReportOpen(true)} />
+              <TrafficMonitorPanel />
             </div>
             <div className="flex-1 relative w-full h-full hidden sm:block">
               <MapContainer />
@@ -97,11 +101,6 @@ export function App() {
       <AlgorithmComparisonModal
         isOpen={isBenchmarkOpen}
         onClose={() => setIsBenchmarkOpen(false)}
-      />
-
-      <IncidentReportModal
-        isOpen={isReportOpen}
-        onClose={() => setIsReportOpen(false)}
       />
 
       <AuthModal

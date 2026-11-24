@@ -17,6 +17,10 @@ from app.schemas.traffic import TrafficCondition
 
 class RoutingService:
     def search_routes(self, request: RouteSearchRequest) -> RouteSearchData:
+        # Sinkronkan data trafik real-time ke graf jalan sebelum kalkulasi rute
+        from app.services.traffic_service import traffic_service
+        traffic_service._sync_to_graph()
+
         graph = get_active_graph()
         nodes = get_active_nodes()
 
@@ -78,11 +82,17 @@ class RoutingService:
         )
 
         # 4. Format Rute Rekomendasi
+        route_name = (
+            "Rute Jalur Tikus (Hindari Macet)"
+            if (request.avoid_congestion or request.route_preference == RoutePreference.AVOID_CONGESTION)
+            else "Rute Cepat (Jalan Utama)"
+        )
         rec_route = self._format_route_option(
             route_raw=astar_res,
-            name="Rute Tercepat (Rekomendasi)",
+            name=route_name,
             origin_coords=[request.origin.longitude, request.origin.latitude],
-            dest_coords=[request.destination.longitude, request.destination.latitude]
+            dest_coords=[request.destination.longitude, request.destination.latitude],
+            is_primary=True
         )
 
         # 5. Cari Alternatif Rute
@@ -99,13 +109,16 @@ class RoutingService:
                 avoid_tolls=request.avoid_tolls,
                 avoid_congestion=request.avoid_congestion
             )
+            primary_nodes = astar_res.get("path_nodes", [])
             for i, raw_alt in enumerate(raw_alts):
                 alt_name = f"Alternatif {i + 1}"
                 alt_route = self._format_route_option(
                     route_raw=raw_alt,
                     name=alt_name,
                     origin_coords=[request.origin.longitude, request.origin.latitude],
-                    dest_coords=[request.destination.longitude, request.destination.latitude]
+                    dest_coords=[request.destination.longitude, request.destination.latitude],
+                    is_primary=False,
+                    primary_nodes=primary_nodes
                 )
                 alternatives.append(alt_route)
 
@@ -145,7 +158,9 @@ class RoutingService:
         route_raw: Dict[str, Any],
         name: str,
         origin_coords: List[float],
-        dest_coords: List[float]
+        dest_coords: List[float],
+        is_primary: bool = False,
+        primary_nodes: Optional[List[str]] = None
     ) -> RouteOption:
         route_id = f"route_{uuid.uuid4().hex[:8]}"
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -186,10 +201,23 @@ class RoutingService:
                 )
             )
 
-        coordinates.append(dest_coords)
+        if not coordinates or coordinates[-1] != dest_coords:
+            coordinates.append(dest_coords)
 
-        # Mengambil geometri lekukan jalan presisi tinggi dari OpenStreetMap
-        osm_geom = fetch_osm_road_geometry(coordinates)
+        # Siapkan titik query koridor untuk OSRM:
+        # Untuk rute rekomendasi: gunakan [origin, destination] langsung agar OSRM mengikuti aspal koridor utama secara presisi
+        # Untuk rute alternatif: sertakan anchor_node pembeda agar OSRM mengikuti aspal koridor alternatif secara presisi
+        path_nodes = route_raw.get("path_nodes", [])
+        osm_query_points = [origin_coords]
+        if not is_primary and path_nodes:
+            nodes_dict = get_active_nodes()
+            diff_nodes = [n for n in path_nodes if n not in (primary_nodes or []) and n in nodes_dict]
+            chosen_node = diff_nodes[len(diff_nodes) // 2] if diff_nodes else (path_nodes[len(path_nodes) // 2] if len(path_nodes) > 2 else None)
+            if chosen_node and chosen_node in nodes_dict:
+                osm_query_points.append([nodes_dict[chosen_node]["lon"], nodes_dict[chosen_node]["lat"]])
+        osm_query_points.append(dest_coords)
+
+        osm_geom = fetch_osm_road_geometry(osm_query_points)
         final_coords = osm_geom if (osm_geom and len(osm_geom) > 1) else coordinates
 
         return RouteOption(
