@@ -4,6 +4,7 @@ import type {
   VehicleType,
   RoutePreference,
   RouteOption,
+  RouteSegment,
   RouteSearchData,
 } from '../types';
 import { routeService } from '../services/routeService';
@@ -22,6 +23,7 @@ interface RouteState {
   alternatives: RouteOption[];
   selectedRoute: RouteOption | null;
   comparison: RouteSearchData['comparison'] | null;
+  focusedSegment: RouteSegment | null;
 
   isLoading: boolean;
   error: string | null;
@@ -33,6 +35,7 @@ interface RouteState {
   setAvoidTolls: (val: boolean) => void;
   setAvoidCongestion: (val: boolean) => void;
   setSelectedRoute: (route: RouteOption) => void;
+  setFocusedSegment: (segment: RouteSegment | null) => void;
   searchRoutes: () => Promise<void>;
   clearRoute: () => void;
 }
@@ -77,6 +80,7 @@ export const useRouteStore = create<RouteState>((set, get) => ({
   alternatives: [],
   selectedRoute: null,
   comparison: null,
+  focusedSegment: null,
 
   isLoading: false,
   error: null,
@@ -88,7 +92,8 @@ export const useRouteStore = create<RouteState>((set, get) => ({
   setPreference: (preference) => set({ preference }),
   setAvoidTolls: (avoidTolls) => set({ avoidTolls }),
   setAvoidCongestion: (avoidCongestion) => set({ avoidCongestion }),
-  setSelectedRoute: (selectedRoute) => set({ selectedRoute }),
+  setSelectedRoute: (selectedRoute) => set({ selectedRoute, focusedSegment: null }),
+  setFocusedSegment: (focusedSegment) => set({ focusedSegment }),
 
   searchRoutes: async () => {
     const { origin, destination, vehicleType, preference, avoidTolls, avoidCongestion } = get();
@@ -97,7 +102,7 @@ export const useRouteStore = create<RouteState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, focusedSegment: null });
     try {
       const data = await routeService.searchRoutes({
         origin,
@@ -127,6 +132,7 @@ export const useRouteStore = create<RouteState>((set, get) => ({
       alternatives: [],
       selectedRoute: null,
       comparison: null,
+      focusedSegment: null,
       error: null,
     }),
 }));

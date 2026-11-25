@@ -12,9 +12,10 @@ import {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreglWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import { Compass, Layers } from 'lucide-react';
 import { useRouteStore } from '../../stores/useRouteStore';
 import { useTrafficStore } from '../../stores/useTrafficStore';
-import { THEME_COLORS } from '../../theme/colors';
+import { useTripStore } from '../../stores/useTripStore';
 
 // Mengatur worker URL eksplisit agar Vite dapat melayani web worker dengan benar
 setWorkerUrl(maplibreglWorkerUrl);
@@ -32,9 +33,20 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
   const originMarkerRef = useRef<Marker | null>(null);
   const destMarkerRef = useRef<Marker | null>(null);
   const incidentMarkersRef = useRef<Marker[]>([]);
+  const vehicleMarkerRef = useRef<Marker | null>(null);
+  const vehicleElementRef = useRef<HTMLDivElement | null>(null);
 
-  const { origin, destination, recommendedRoute, alternatives, selectedRoute } = useRouteStore();
+  const { origin, destination, recommendedRoute, alternatives, selectedRoute, focusedSegment } = useRouteStore();
   const { incidents, apiKey } = useTrafficStore();
+  const {
+    isNavigating,
+    is3DMode,
+    autoFollow,
+    currentGPS,
+    currentBearing,
+    setAutoFollow,
+    setIs3DMode,
+  } = useTripStore();
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -48,6 +60,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
       style: DARK_MAP_STYLE,
       center: initialCenter,
       zoom: 13,
+      maxPitch: 75,
       attributionControl: false,
     });
 
@@ -65,10 +78,10 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
         source: 'alt-routes',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': THEME_COLORS.route.alternative,
-          'line-width': 4,
-          'line-opacity': 0.75,
-          'line-dasharray': [2, 2],
+          'line-color': ['coalesce', ['get', 'color'], '#64748B'],
+          'line-width': 5,
+          'line-opacity': 0.85,
+          'line-dasharray': [3, 2],
         },
       });
 
@@ -82,9 +95,9 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
         source: 'primary-route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#000000',
-          'line-width': 8,
-          'line-opacity': 0.6,
+          'line-color': '#050B14',
+          'line-width': 10,
+          'line-opacity': 0.95,
         },
       });
       map.addLayer({
@@ -93,9 +106,47 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
         source: 'primary-route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': THEME_COLORS.route.primary,
+          'line-color': ['coalesce', ['get', 'color'], '#22C55E'],
           'line-width': 6,
-          'line-opacity': 0.95,
+          'line-opacity': 1.0,
+        },
+      });
+      map.addLayer({
+        id: 'primary-route-core',
+        type: 'line',
+        source: 'primary-route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#FFFFFF',
+          'line-width': 2,
+          'line-opacity': 0.6,
+        },
+      });
+
+      map.addSource('focused-segment', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'focused-segment-glow',
+        type: 'line',
+        source: 'focused-segment',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#F59E0B',
+          'line-width': 12,
+          'line-opacity': 0.85,
+        },
+      });
+      map.addLayer({
+        id: 'focused-segment-core',
+        type: 'line',
+        source: 'focused-segment',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#FFFFFF',
+          'line-width': 4,
+          'line-opacity': 1.0,
         },
       });
     });
@@ -103,6 +154,12 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     map.on('click', (e: MapMouseEvent) => {
       if (onMapClick) {
         onMapClick({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
+      }
+    });
+
+    map.on('dragstart', () => {
+      if (useTripStore.getState().isNavigating) {
+        useTripStore.getState().setAutoFollow(false);
       }
     });
 
@@ -234,10 +291,46 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     const activeRoute = selectedRoute || recommendedRoute;
 
     if (activeRoute && primarySource) {
+      const segments = activeRoute.segments || [];
+      const features = segments.length > 0
+        ? segments.map((seg, idx) => {
+            let color = '#22C55E'; // HIJAU LANCAR
+            if (seg.traffic_level === 'heavy' || seg.traffic_level === 'severe') {
+              color = '#EF4444'; // MERAH MACET
+            } else if (seg.traffic_level === 'moderate') {
+              color = '#F59E0B'; // ORANYE PADAT
+            } else if (seg.traffic_level === 'light') {
+              color = '#22C55E'; // HIJAU LANCAR
+            }
+
+            return {
+              type: 'Feature' as const,
+              properties: {
+                segment_id: seg.edge_id || `seg_${idx}`,
+                traffic_level: seg.traffic_level,
+                color: color,
+                street_name: seg.street_name,
+              },
+              geometry: seg.geometry,
+            };
+          })
+        : [
+            {
+              type: 'Feature' as const,
+              properties: {
+                color: activeRoute.traffic_level === 'heavy' || activeRoute.traffic_level === 'severe'
+                  ? '#EF4444'
+                  : activeRoute.traffic_level === 'moderate'
+                  ? '#F59E0B'
+                  : '#22C55E',
+              },
+              geometry: activeRoute.geometry,
+            },
+          ];
+
       primarySource.setData({
-        type: 'Feature',
-        properties: {},
-        geometry: activeRoute.geometry,
+        type: 'FeatureCollection',
+        features: features,
       });
 
       const coordinates = activeRoute.geometry.coordinates;
@@ -255,11 +348,45 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     if (alternatives.length > 0 && altSource) {
       const altFeatures = alternatives
         .filter((alt) => alt.route_id !== activeRoute?.route_id)
-        .map((alt) => ({
-          type: 'Feature' as const,
-          properties: { route_id: alt.route_id },
-          geometry: alt.geometry,
-        }));
+        .flatMap((alt) => {
+          const segs = alt.segments || [];
+          if (segs.length > 0) {
+            return segs.map((seg, idx) => {
+              let color = '#64748B'; // Abu-abu standar alternatif
+              if (seg.traffic_level === 'heavy' || seg.traffic_level === 'severe') {
+                color = '#EF4444'; // MERAH MACET
+              } else if (seg.traffic_level === 'moderate') {
+                color = '#F59E0B'; // ORANYE PADAT
+              } else if (seg.traffic_level === 'free_flow' || seg.traffic_level === 'light') {
+                color = '#22C55E'; // HIJAU LANCAR
+              }
+              return {
+                type: 'Feature' as const,
+                properties: {
+                  route_id: alt.route_id,
+                  segment_id: seg.edge_id || `alt_seg_${idx}`,
+                  traffic_level: seg.traffic_level,
+                  color: color,
+                },
+                geometry: seg.geometry,
+              };
+            });
+          }
+          return [
+            {
+              type: 'Feature' as const,
+              properties: {
+                route_id: alt.route_id,
+                color: alt.traffic_level === 'heavy' || alt.traffic_level === 'severe'
+                  ? '#EF4444'
+                  : alt.traffic_level === 'moderate'
+                  ? '#F59E0B'
+                  : '#64748B',
+              },
+              geometry: alt.geometry,
+            },
+          ];
+        });
 
       altSource.setData({
         type: 'FeatureCollection',
@@ -269,6 +396,35 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
       altSource.setData({ type: 'FeatureCollection', features: [] });
     }
   }, [selectedRoute, recommendedRoute, alternatives]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    const source = map.getSource('focused-segment') as GeoJSONSource;
+    if (!source) return;
+
+    if (focusedSegment && focusedSegment.geometry && focusedSegment.geometry.coordinates?.length > 0) {
+      source.setData({
+        type: 'Feature',
+        properties: {},
+        geometry: focusedSegment.geometry,
+      });
+
+      const coords = focusedSegment.geometry.coordinates;
+      if (coords.length > 1) {
+        const bounds = coords.reduce(
+          (b, coord) => b.extend(coord as [number, number]),
+          new LngLatBounds(coords[0], coords[0])
+        );
+        map.fitBounds(bounds, { padding: 120, maxZoom: 16, duration: 600 });
+      } else if (coords.length === 1) {
+        map.flyTo({ center: coords[0] as [number, number], zoom: 16, duration: 600 });
+      }
+    } else {
+      source.setData({ type: 'FeatureCollection', features: [] });
+    }
+  }, [focusedSegment]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -303,9 +459,123 @@ export const MapContainer: React.FC<MapContainerProps> = ({ onMapClick }) => {
     });
   }, [incidents]);
 
+  // Efek Navigasi 3D & Tracking Posisi / Arah Kendaraan
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (isNavigating && currentGPS) {
+      // 1. Inisialisasi atau Perbarui Posisi Marker Kendaraan (3D Navigation Puck)
+      if (!vehicleMarkerRef.current) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'vehicle-puck-container relative flex items-center justify-center';
+        wrapper.innerHTML = `
+          <div class="absolute w-12 h-12 rounded-full bg-cyan-400/30 animate-ping pointer-events-none"></div>
+          <div class="relative w-10 h-10 rounded-full bg-cyan-500 border-2 border-white shadow-2xl flex items-center justify-center text-midnight-navy font-black z-20">
+            <svg class="vehicle-arrow w-5 h-5 fill-current text-midnight-navy transition-transform duration-300" viewBox="0 0 24 24">
+              <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+            </svg>
+          </div>
+        `;
+
+        const marker = new Marker({ element: wrapper, anchor: 'center' })
+          .setLngLat([currentGPS.longitude, currentGPS.latitude])
+          .addTo(map);
+
+        vehicleMarkerRef.current = marker;
+        vehicleElementRef.current = wrapper.querySelector('.vehicle-arrow') as HTMLDivElement;
+      } else {
+        vehicleMarkerRef.current.setLngLat([currentGPS.longitude, currentGPS.latitude]);
+      }
+
+      if (vehicleElementRef.current) {
+        vehicleElementRef.current.style.transform = `rotate(${currentBearing}deg)`;
+      }
+
+      // 2. Kamera Mengikuti Pergerakan Kendaraan secara Mulus dalam Mode 3D
+      if (autoFollow) {
+        map.easeTo({
+          center: [currentGPS.longitude, currentGPS.latitude],
+          bearing: currentBearing,
+          pitch: is3DMode ? 60 : 0,
+          zoom: 18,
+          duration: 600,
+          easing: (t) => t,
+        });
+      }
+    } else {
+      // Bersihkan marker kendaraan saat navigasi dibatalkan / selesai
+      if (vehicleMarkerRef.current) {
+        vehicleMarkerRef.current.remove();
+        vehicleMarkerRef.current = null;
+        vehicleElementRef.current = null;
+      }
+      // Kembalikan orientasi kamera ke tampilan 2D datar semula dan zoom out ke rute awal
+      if (map.isStyleLoaded()) {
+        const activeRoute = selectedRoute || recommendedRoute;
+        const coordinates = activeRoute?.geometry?.coordinates;
+        if (coordinates && coordinates.length > 1) {
+          const bounds = coordinates.reduce(
+            (b, coord) => b.extend(coord as [number, number]),
+            new LngLatBounds(coordinates[0], coordinates[0])
+          );
+          map.fitBounds(bounds, { padding: 80, duration: 800, pitch: 0, bearing: 0 });
+        } else if (origin) {
+          map.flyTo({ center: [origin.longitude, origin.latitude], zoom: 14, pitch: 0, bearing: 0, duration: 800 });
+        } else {
+          map.easeTo({ pitch: 0, bearing: 0, zoom: 13, duration: 800 });
+        }
+      }
+    }
+  }, [isNavigating, is3DMode, autoFollow, currentGPS, currentBearing]);
+
   return (
     <div className="relative w-full h-full min-h-[500px] overflow-hidden">
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+
+      {/* Floating 3D Navigation Controls */}
+      {isNavigating && (
+        <>
+          {/* Tombol Toggle 3D / 2D di Sudut Kanan Atas */}
+          <div className="absolute top-4 right-14 z-30 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIs3DMode(!is3DMode)}
+              className="bg-midnight-navy/90 hover:bg-surface border border-border text-text-primary px-3 py-1.5 rounded-lg text-xs font-bold shadow-xl flex items-center gap-1.5 backdrop-blur transition"
+              title="Ganti Sudut Pandang Kamera 3D / 2D"
+            >
+              <Layers className="w-3.5 h-3.5 text-primary" />
+              <span>{is3DMode ? '3D Navigasi' : '2D Peta'}</span>
+            </button>
+          </div>
+
+          {/* Tombol Pusatkan Kembali (Muncul jika user menggeser peta secara manual) */}
+          {!autoFollow && currentGPS && (
+            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoFollow(true);
+                  const map = mapRef.current;
+                  if (map && currentGPS) {
+                    map.flyTo({
+                      center: [currentGPS.longitude, currentGPS.latitude],
+                      pitch: is3DMode ? 60 : 0,
+                      bearing: currentBearing,
+                      zoom: 18,
+                      duration: 800,
+                    });
+                  }
+                }}
+                className="bg-primary hover:bg-primary-hover text-midnight-navy font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs border border-white/20 hover:scale-105 active:scale-95 transition-transform"
+              >
+                <Compass className="w-4 h-4 animate-spin text-midnight-navy" style={{ animationDuration: '6s' }} />
+                <span>Pusatkan Kembali (3D Ikuti Jalan)</span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

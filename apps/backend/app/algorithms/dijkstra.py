@@ -64,9 +64,11 @@ def dijkstra_search(
                 path_edges.append(edge_data)
 
                 total_distance += float(edge_data.get("distance_meters", 0.0))
+                # Durasi fisik tanpa penalti bobot heuristik / preferensi
                 raw_cost = calculate_edge_weight(
-                    edge_data, vehicle_type, RoutePreference.FASTEST,
-                    avoid_tolls=False, avoid_congestion=False, penalty_multiplier=1.0
+                    edge_data, vehicle_type, preference,
+                    avoid_tolls=avoid_tolls, avoid_congestion=avoid_congestion,
+                    penalty_multiplier=1.0, raw_duration_only=True
                 )
                 total_duration += raw_cost
                 curr = prev

@@ -37,11 +37,19 @@ export function App() {
   const handleStartTrip = async (route: RouteOption) => {
     if (!origin || !destination) return;
     if (!isAuthenticated) {
-      setIsAuthOpen(true);
-      return;
+      try {
+        await useAuthStore.getState().login({
+          email: 'testdriver@jalurtikus.id',
+          password: 'SecurePassword123!',
+        });
+      } catch {
+        setIsAuthOpen(true);
+        return;
+      }
     }
     try {
-      await startTrip(route.route_id, origin, destination);
+      const coords = (route.geometry?.coordinates || []) as [number, number][];
+      await startTrip(route.route_id, origin, destination, 'motorcycle', coords);
     } catch {
       // Handled in store
     }

@@ -30,7 +30,8 @@ def calculate_edge_weight(
     preference: RoutePreference = RoutePreference.FASTEST,
     avoid_tolls: bool = False,
     avoid_congestion: bool = True,
-    penalty_multiplier: float = 1.0
+    penalty_multiplier: float = 1.0,
+    raw_duration_only: bool = False
 ) -> float:
     """
     Menghitung bobot (cost) suatu edge berdasarkan PRD Bab 9:
@@ -58,10 +59,6 @@ def calculate_edge_weight(
     if distance_meters <= 0:
         distance_meters = 1.0
 
-    # Jika preferensi SHORTEST murni, gunakan jarak meter
-    if preference == RoutePreference.SHORTEST:
-        return distance_meters * penalty_multiplier
-
     # 4. Hitung Kecepatan Efektif (V_e)
     road_type = edge_data.get("road_type", "primary")
     base_speed = float(edge_data.get("base_speed_kmh", DEFAULT_SPEEDS_KMH.get(road_type, 30.0)))
@@ -81,22 +78,37 @@ def calculate_edge_weight(
     speed_ms = effective_speed_kmh * (1000.0 / 3600.0)
     duration_seconds = distance_meters / speed_ms
 
-    # 6. Penalti Tambahan untuk Congestion jika diaktifkan (Jalur Tikus / Hindari Macet)
-    congestion_penalty = 1.0
-    if avoid_congestion or preference == RoutePreference.AVOID_CONGESTION:
+    if raw_duration_only:
+        return duration_seconds
+
+    # Jika preferensi SHORTEST murni, gunakan jarak meter
+    if preference == RoutePreference.SHORTEST:
+        return distance_meters * penalty_multiplier
+
+    # 6. Penalti / Insentif Berdasarkan Preferensi Rute
+    cost_multiplier = 1.0
+    if preference == RoutePreference.FASTEST and not avoid_congestion:
+        # Rute Cepat (Jalan Utama): Mengutamakan jalan arteri / protokol lebar berkecepatan tinggi
+        if road_type in ["residential", "service"]:
+            cost_multiplier = 2.0  # Hindari masuk ke gang / pemukiman jika jalan utama tersedia
+        # Jalan arteri (primary, trunk, motorway) tetap berbobot standar 1.0
+    elif avoid_congestion or preference == RoutePreference.AVOID_CONGESTION:
+        # Hindari Macet (Jalur Tikus): Potong kemacetan melalui jalur alternatif
         if traffic_condition == TrafficCondition.LIGHT:
-            congestion_penalty = 1.2
+            cost_multiplier = 1.4
         elif traffic_condition == TrafficCondition.MODERATE:
-            congestion_penalty = 2.2
+            cost_multiplier = 2.5
         elif traffic_condition == TrafficCondition.HEAVY:
-            congestion_penalty = 4.5
+            cost_multiplier = 5.0
         elif traffic_condition == TrafficCondition.SEVERE:
-            congestion_penalty = 10.0
+            cost_multiplier = 12.0
 
-        # Berikan prioritas khusus untuk Jalur Tikus (jalan pemukiman / gang alternatif) yang lancar (FREE_FLOW)
-        if road_type in ["residential", "service", "tertiary"] and traffic_condition == TrafficCondition.FREE_FLOW:
-            congestion_penalty *= 0.65
+        if road_type in ["residential", "service", "tertiary"]:
+            if traffic_condition == TrafficCondition.FREE_FLOW:
+                cost_multiplier *= 0.50  # Insentif tinggi memotong jalan lewat jalur tikus lancar
+        elif road_type in ["primary", "trunk"]:
+            cost_multiplier *= 1.40  # Penalti risiko kemacetan koridor arteri utama
 
-    total_weight = duration_seconds * congestion_penalty * penalty_multiplier
+    total_weight = duration_seconds * cost_multiplier * penalty_multiplier
     return total_weight
 
